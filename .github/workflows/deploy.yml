@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   schedule:
-    # Once a day at 21:00 UTC (5 PM ET in season, 4 PM in winter) -- after
-    # books post shot props, before most puck drops. Each run costs about
-    # one Odds API credit per game on the slate, so one run a day stays
-    # inside the free tier's 500 credits/month. Add a second, earlier run
-    # (e.g. "0 16 * * *" for weekend matinees) only on a paid plan.
-    - cron: "0 21 * * *"
+    # 9 AM Eastern, year-round. GitHub cron only speaks UTC, so this fires
+    # at both 13:00 UTC (9 AM EDT) and 14:00 UTC (9 AM EST), and the `gate`
+    # job below skips whichever one isn't 9 AM in New York -- one real run a
+    # day. Each run costs about one Odds API credit per game on the slate,
+    # which stays well inside the free tier.
+    - cron: "0 13 * * *"
+    - cron: "0 14 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -22,7 +23,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        run: |
+          # Pushes and manual runs always go; scheduled runs only at 9 AM ET.
+          # Scheduled runs can start several minutes late, so check the hour
+          # rather than the exact time.
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=America/New_York date +%H)" = "09" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not 9 AM in New York (DST duplicate) -- skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

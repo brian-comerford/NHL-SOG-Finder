@@ -81,7 +81,7 @@ npm run dev       # copies ../data/*.json into public/data, then starts Vite
 
 `.github/workflows/deploy.yml` runs the pipeline, commits pick history back
 to the repo, builds the frontend and deploys to GitHub Pages. It fires on
-every push to `main`, daily at 21:00 UTC, and on demand from the Actions tab.
+every push to `main`, daily at 9 AM Eastern, and on demand from the Actions tab.
 
 1. **Settings -> Pages**: set **Source** to "GitHub Actions".
 2. (Optional, for live odds) Get a free key at
