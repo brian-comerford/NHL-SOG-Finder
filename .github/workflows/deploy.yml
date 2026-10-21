@@ -5,12 +5,13 @@ on:
     branches: [main]
   schedule:
     # 9 AM Eastern, year-round. GitHub cron only speaks UTC, so this fires
-    # at both 13:00 UTC (9 AM EDT) and 14:00 UTC (9 AM EST), and the `gate`
-    # job below skips whichever one isn't 9 AM in New York -- one real run a
-    # day. Each run costs about one Odds API credit per game on the slate,
-    # which stays well inside the free tier.
-    - cron: "0 13 * * *"
-    - cron: "0 14 * * *"
+    # at both 13:07 UTC (9:07 AM EDT) and 14:07 UTC (9:07 AM EST), and the
+    # `gate` job below keeps only the one that matches New York's current
+    # UTC offset -- one real run a day. Minute 7 rather than :00 because
+    # GitHub's scheduler is busiest on the hour and can start those runs
+    # hours late. Each run costs about one Odds API credit per game.
+    - cron: "7 13 * * *"
+    - cron: "7 14 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -30,15 +31,23 @@ jobs:
     steps:
       - id: check
         run: |
-          # Pushes and manual runs always go; scheduled runs only at 9 AM ET.
-          # Scheduled runs can start several minutes late, so check the hour
-          # rather than the exact time.
-          if [ "${{ github.event_name }}" != "schedule" ] || [ "$(TZ=America/New_York date +%H)" = "09" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
+          # Pushes and manual runs always go. A scheduled run goes if its
+          # cron is the 9 AM ET one for New York's current offset (EDT ->
+          # 13:07 UTC, EST -> 14:07 UTC). This keys off which cron fired,
+          # not the clock, because GitHub can start scheduled runs hours
+          # late -- a late 9 AM run should still run, just late.
+          if [ "$EVENT" != "schedule" ]; then
+            run=true
+          elif [ "$(TZ=America/New_York date +%Z)" = "EDT" ]; then
+            [ "$CRON" = "7 13 * * *" ] && run=true || run=false
           else
-            echo "Not 9 AM in New York (DST duplicate) -- skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
+            [ "$CRON" = "7 14 * * *" ] && run=true || run=false
           fi
+          echo "event=$EVENT cron='$CRON' -> run=$run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
 
   build:
     needs: gate
