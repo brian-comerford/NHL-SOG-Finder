@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Data pipeline output (rebuilt by scripts/generate_data.py on every CI run)
+data/*
+!data/.gitkeep
+# ...except pick history, which CI commits back: it's the only record of
+# what the model recommended before each game, and can't be rebuilt later.
+!data/history/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/public/data/
+frontend/*.tsbuildinfo
+
+# Editors / OS
+.DS_Store
+.vscode/

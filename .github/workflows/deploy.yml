@@ -1,0 +1,89 @@
+name: Build data & deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Once a day at 21:00 UTC (5 PM ET in season, 4 PM in winter) -- after
+    # books post shot props, before most puck drops. Each run costs about
+    # one Odds API credit per game on the slate, so one run a day stays
+    # inside the free tier's 500 credits/month. Add a second, earlier run
+    # (e.g. "0 16 * * *" for weekend matinees) only on a paid plan.
+    - cron: "0 21 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install pipeline dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Fetch NHL data & odds, run the model, grade past picks
+        working-directory: scripts
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: python generate_data.py
+
+      # Everything else in data/ is rebuilt from scratch each run, but pick
+      # history can't be recreated after the fact, so it's committed back
+      # to the repo (there's no database). Non-fatal: a rare push race
+      # shouldn't block the deploy, and the next run recomputes anyway.
+      - name: Commit updated pick history
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/history
+          if git diff --cached --quiet; then
+            echo "No pick-history changes to commit."
+          else
+            git commit -m "Update pick history [skip ci]"
+            git push || (git fetch origin main && git merge -X ours --no-edit origin/main && git push) || echo "::warning::Couldn't push pick history this run -- will retry next run."
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (pulls in the freshly generated data)
+        working-directory: frontend
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
