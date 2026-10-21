@@ -12,6 +12,8 @@ data/*
 # ...and the box-score cache behind the position rankings, so each run only
 # fetches new games instead of re-downloading the whole season.
 !data/cache/
+# ...and the one-off line-posting-time probe log (probe-lines.yml).
+!data/probe/
 
 # Node / frontend
 frontend/node_modules/

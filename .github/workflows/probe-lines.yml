@@ -1,0 +1,72 @@
+name: Probe SOG line posting times
+
+# One-off experiment: checks hourly through the day when DraftKings and
+# FanDuel post NHL shots-on-goal lines, so the daily refresh can be timed
+# around it. Logs to data/probe/lines_log.jsonl. Uses the separate
+# ODDS_API_KEY_FREE secret, never the main key, and stops on its own after
+# PROBE_UNTIL -- delete this file once the experiment is done.
+
+on:
+  schedule:
+    # Hourly at :23 from 10:23 to 23:23 UTC (6:23 AM - 7:23 PM EDT).
+    - cron: "23 10-23 * * *"
+  workflow_dispatch: {}
+
+env:
+  PROBE_UNTIL: "2026-10-23"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: probe-lines
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check probe window and key
+        id: window
+        env:
+          HAS_KEY: ${{ secrets.ODDS_API_KEY_FREE != '' }}
+        run: |
+          today=$(TZ=America/New_York date +%F)
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::warning::ODDS_API_KEY_FREE secret isn't set -- skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$today" > "$PROBE_UNTIL" ]]; then
+            echo "Probe window ended $PROBE_UNTIL -- skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.window.outputs.go == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.window.outputs.go == 'true'
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Probe lines
+        if: steps.window.outputs.go == 'true'
+        working-directory: scripts
+        env:
+          ODDS_API_KEY_FREE: ${{ secrets.ODDS_API_KEY_FREE }}
+        run: |
+          pip install -q -r requirements.txt
+          python probe_lines.py
+
+      - name: Commit log
+        if: steps.window.outputs.go == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/probe
+          git diff --cached --quiet && exit 0
+          git commit -m "Probe SOG line posting times [skip ci]"
+          git pull --no-rebase -X ours --no-edit origin main && git push
