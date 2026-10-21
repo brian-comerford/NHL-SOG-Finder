@@ -21,6 +21,13 @@ scripts/fetch_stats.py   Finds the next game day's unstarted games, then pulls
                           team shots-against from the NHL's free public API
                           (api-web.nhle.com / api.nhle.com -- no key needed).
 
+scripts/fetch_matchups.py
+                          Tallies shots on goal allowed to opposing LW / C /
+                          RW / D for every team from final box scores and
+                          ranks them 1 (fewest) to 32 (most). Box scores are
+                          cached in data/cache/ (committed by CI), so after a
+                          one-time backfill each run fetches only new games.
+
 scripts/fetch_odds.py    Fetches player_shots_on_goal odds (DraftKings,
                           FanDuel) from The Odds API (needs ODDS_API_KEY).
                           Falls back to clearly-labeled SAMPLE lines built
@@ -31,7 +38,8 @@ scripts/analyze.py       The value model:
                              shots over his last 40 games, last season
                              discounted.
                           2. Scaled by the opponent's shots allowed per game
-                             vs. league average (shrunk, capped at +/-15%).
+                             to the player's position vs. league average
+                             (shrunk toward last season, capped at +/-20%).
                           3. Over/under probability from a negative binomial
                              fit to the player's own variance (Poisson if
                              he's steadier than that).
@@ -44,9 +52,12 @@ scripts/grade.py         Grades past snapshots against final box scores
                           (scratched players are voided) and builds the
                           track record.
 
-frontend/                React + Vite + Tailwind app: filterable props table,
-                          per-player detail with a last-10-games chart
-                          (Recharts), track record, and an Info tab.
+frontend/                React + Vite + Tailwind app. The Matchups tab (the
+                          default) is the SOG-allowed-by-position grid for
+                          the slate: tap a rank to see the opposing players
+                          at that position with line, odds, edge and
+                          confidence. The Edge list tab is the filterable
+                          table of every prop ranked by edge.
 ```
 
 Data flows one way: Python writes `data/*.json` -> the frontend build copies
@@ -89,8 +100,8 @@ only on a paid plan.
 
 - Line combinations, power-play units and the opposing goalie aren't
   modeled directly.
-- The opponent adjustment is team-level shots allowed per game, not split by
-  position or score state.
+- The opponent adjustment is shots allowed per game by position, not split
+  by score state or the opposing goalie.
 - `MODEL_WEIGHT` (0.40) is borrowed from the NFL Player Prop Finder; refit
   it once enough NHL picks are graded (snapshots store the raw model
   probability for exactly that).

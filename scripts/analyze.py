@@ -5,7 +5,8 @@ over/under against the sportsbook line, and ranks props by edge.
    game over his last MAX_GAMES games (this season + last season, with
    last season discounted -- see common.game_weights).
 2. Opponent: scales the mean by how many shots the opponent allows per
-   game relative to league average (shrunk toward last season early on).
+   game *to the player's position* relative to league average (see
+   fetch_matchups.py), falling back to team-wide shots allowed.
 3. Distribution: shots are counts and are overdispersed (a top-line
    shooter's 2-shot nights and 7-shot nights are both common), so the
    projection is a negative binomial with the player's own variance-to-
@@ -13,7 +14,8 @@ over/under against the sportsbook line, and ranks props by edge.
 4. Edge: the model's probability is blended with the book's no-vig
    probability (MODEL_WEIGHT), and edge = blended - book.
 
-Writes data/props.json and data/meta.json, and snapshots the current
+Writes data/props.json, data/meta.json and data/matchups.json (the
+position-ranking grid for the slate), and snapshots the current
 recommendations to data/history/ for grading once the games are played.
 """
 import os
@@ -164,7 +166,7 @@ def build_trends(games, line, side, opponent):
     return trends
 
 
-def confidence_for(games, season, side, line, edge, opp_factor):
+def confidence_for(games, season, side, line, edge, opp_factor, opp_rank=None, rank_of=32):
     """Low/Medium/High from a handful of transparent signals, each listed
     for the detail view as supporting or cutting against the pick."""
     reasons = []
@@ -184,10 +186,13 @@ def confidence_for(games, season, side, line, edge, opp_factor):
     elif hit_rate <= 0.4:
         reasons.append((False, f"Recent form disagrees: {side} hit in only {pct}% of his last {len(recent)}"))
 
+    matchup = f"opponent allows {opp_factor:.2f}x league-average shots"
+    if opp_rank is not None:
+        matchup += f" to his position (rank {opp_rank} of {rank_of})"
     if (opp_factor > 1.03 and side == "over") or (opp_factor < 0.97 and side == "under"):
-        reasons.append((True, f"Matchup helps: opponent allows {opp_factor:.2f}x league-average shots"))
+        reasons.append((True, f"Matchup helps: {matchup}"))
     elif (opp_factor > 1.03 and side == "under") or (opp_factor < 0.97 and side == "over"):
-        reasons.append((False, f"Matchup hurts: opponent allows {opp_factor:.2f}x league-average shots"))
+        reasons.append((False, f"Matchup hurts: {matchup}"))
 
     toi_recent = [g["toi"] for g in games[:5] if g["toi"]]
     toi_all = [g["toi"] for g in games[:20] if g["toi"]]
@@ -282,6 +287,8 @@ def main():
     quotes = load_json("odds_quotes.json", [])
     odds_meta = load_json("odds_meta.json", {}) or {}
     opp_factors = league_and_opponent_factors(load_json("team_stats.json", {}) or {})
+    pos_defense = load_json("position_defense.json", {}) or {}
+    pos_teams = pos_defense.get("teams", {})
 
     games_by_id = {g["game_id"]: g for g in slate}
     team_dates = team_game_dates(players, season)
@@ -313,7 +320,9 @@ def main():
         toi_mean, _, _ = weighted_mean_var(
             [g["toi"] for g in games if g["toi"]], [w for g, w in zip(games, weights) if g["toi"]]
         )
-        opp_factor = opp_factors.get(opponent, 1.0)
+        position = POSITION_LABELS.get(player["position"], player["position"])
+        opp_pos = pos_teams.get(opponent, {}).get(position)
+        opp_factor = opp_pos["factor"] if opp_pos else opp_factors.get(opponent, 1.0)
         projected = mean * opp_factor
         dispersion = min(max(var / mean, 1.0), MAX_DISPERSION) if mean > 0 else 1.0
         line = float(q["point"])
@@ -327,13 +336,16 @@ def main():
         edge_under = p_under - imp_under if imp_under is not None else None
         side = "over" if _or_floor(edge_over) >= _or_floor(edge_under) else "under"
         edge = (edge_over if side == "over" else edge_under) or 0.0
-        confidence, reasons = confidence_for(games, season, side, line, edge, opp_factor)
+        confidence, reasons = confidence_for(
+            games, season, side, line, edge, opp_factor,
+            opp_pos["rank"] if opp_pos else None, pos_defense.get("team_count") or 32,
+        )
 
         props.append(
             {
                 "player_id": player["player_id"],
                 "player_name": player["player_name"],
-                "position": POSITION_LABELS.get(player["position"], player["position"]),
+                "position": position,
                 "team": player["team"],
                 "opponent": opponent,
                 "home": home,
@@ -362,6 +374,7 @@ def main():
                 "avg_toi": safe_round(toi_mean, 1),
                 "shots_per_60": safe_round(mean / toi_mean * 60, 1) if toi_mean else None,
                 "opponent_factor": round(opp_factor, 3),
+                "opponent_pos_rank": opp_pos["rank"] if opp_pos else None,
                 "dispersion": round(dispersion, 2),
                 "sample_games": n,
                 "season_games": sum(1 for g in games if g["season"] == season),
@@ -396,6 +409,31 @@ def main():
             "model_weight": MODEL_WEIGHT,
             "matchups": sorted({p["matchup"] for p in props}),
             "books": sorted({b for p in props for b in (p["book_over"], p["book_under"]) if b}),
+        },
+    )
+    write_json(
+        "matchups.json",
+        {
+            "slate_date": slate_meta.get("slate_date"),
+            "season": season,
+            "team_count": pos_defense.get("team_count", 0),
+            "positions": pos_defense.get("positions", ["LW", "C", "RW", "D"]),
+            "league_avg": pos_defense.get("league_avg", {}),
+            "games": [
+                {
+                    "game_id": g["game_id"],
+                    "start_time_utc": g["start_time_utc"],
+                    "away_team": g["away_team"],
+                    "home_team": g["home_team"],
+                }
+                for g in sorted(slate, key=lambda g: (g["start_time_utc"] or "", g["game_id"]))
+            ],
+            "teams": {
+                t: pos_teams[t]
+                for g in slate
+                for t in (g["away_team"], g["home_team"])
+                if t in pos_teams
+            },
         },
     )
     if slate_meta.get("slate_date") and props:

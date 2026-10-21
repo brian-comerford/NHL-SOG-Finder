@@ -1,4 +1,4 @@
-import type { Meta, Prop, TrackRecord, TrackRecordDetail } from "./types";
+import type { Matchups, Meta, Prop, TrackRecord, TrackRecordDetail } from "./types";
 
 const base = import.meta.env.BASE_URL;
 
@@ -24,4 +24,8 @@ export function fetchTrackRecord(): Promise<TrackRecord> {
 
 export function fetchTrackRecordDetail(): Promise<TrackRecordDetail> {
   return fetchJson<TrackRecordDetail>("track_record_detail.json");
+}
+
+export function fetchMatchups(): Promise<Matchups> {
+  return fetchJson<Matchups>("matchups.json");
 }

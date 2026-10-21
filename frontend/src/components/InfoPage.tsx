@@ -65,9 +65,9 @@ export default function InfoPage({
             happening now.
           </li>
           <li>
-            <strong>Opponent.</strong> The baseline is scaled by how many shots the opponent allows per game
-            relative to league average &mdash; shrunk toward last season while the sample is small and capped at
-            &plusmn;15%.
+            <strong>Opponent.</strong> The baseline is scaled by how many shots the opponent allows per game to the
+            player's position (LW, C, RW or D) relative to league average &mdash; the same numbers behind the
+            Matchups grid, shrunk toward last season while the sample is small and capped at &plusmn;20%.
           </li>
           <li>
             <strong>Distribution.</strong> Shots are counts with streaky, overdispersed nights, so the over/under
@@ -93,8 +93,14 @@ export default function InfoPage({
           <Term term="Model %">The blended probability the recommended side wins, with the odds it implies.</Term>
           <Term term="Book %">The sportsbook's implied probability for that side with the vig removed.</Term>
           <Term term="Edge">Model % minus Book %. Positive means the model thinks the price is too long.</Term>
+          <Term term="Matchup rank">
+            Where a defense ranks in shots on goal allowed to a position: 1 = fewest, 32 = most. Green cells are
+            soft matchups for the opposing shooters; orange cells are tough ones. Ranks early in the season lean
+            on last season's numbers until enough games are played.
+          </Term>
           <Term term="Opponent factor">
-            Opponent's shots allowed per game vs. league average. 1.10x = allows 10% more shots than average.
+            Opponent's shots allowed per game to the player's position vs. league average. 1.10x = allows 10% more
+            than average.
           </Term>
           <Term term="Confidence">
             Low / Medium / High from sample size, recent results against this line, the matchup, ice-time trend

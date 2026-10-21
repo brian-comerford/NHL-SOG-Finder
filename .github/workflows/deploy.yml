@@ -43,18 +43,19 @@ jobs:
         run: python generate_data.py
 
       # Everything else in data/ is rebuilt from scratch each run, but pick
-      # history can't be recreated after the fact, so it's committed back
-      # to the repo (there's no database). Non-fatal: a rare push race
+      # history can't be recreated after the fact, and the box-score cache
+      # behind the position rankings saves re-downloading the whole season,
+      # so both are committed back to the repo (there's no database). Non-fatal: a rare push race
       # shouldn't block the deploy, and the next run recomputes anyway.
-      - name: Commit updated pick history
+      - name: Commit pick history and position cache
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/history
+          git add data/history data/cache
           if git diff --cached --quiet; then
-            echo "No pick-history changes to commit."
+            echo "No history/cache changes to commit."
           else
-            git commit -m "Update pick history [skip ci]"
+            git commit -m "Update pick history and position cache [skip ci]"
             git push || (git fetch origin main && git merge -X ours --no-edit origin/main && git push) || echo "::warning::Couldn't push pick history this run -- will retry next run."
           fi
 

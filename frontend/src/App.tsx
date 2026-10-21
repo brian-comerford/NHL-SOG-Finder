@@ -4,24 +4,27 @@ import Filters, { DEFAULT_FILTERS, type FilterState } from "./components/Filters
 import PropsTable from "./components/PropsTable";
 import PropDetail from "./components/PropDetail";
 import InfoPage from "./components/InfoPage";
+import MatchupGrid from "./components/MatchupGrid";
 import TrackRecordSection from "./components/TrackRecordSection";
-import { fetchMeta, fetchProps, fetchTrackRecord } from "./lib/data";
-import type { Meta, Prop, TrackRecord } from "./lib/types";
+import { fetchMatchups, fetchMeta, fetchProps, fetchTrackRecord } from "./lib/data";
+import type { Matchups, Meta, Prop, TrackRecord } from "./lib/types";
 import { sideBook, sideEdge } from "./lib/odds";
 import { useTheme } from "./lib/useTheme";
 
 const CONFIDENCE_RANK: Record<string, number> = { Low: 0, Medium: 1, High: 2 };
 const FORWARD_POSITIONS = new Set(["C", "LW", "RW"]);
-type Tab = "props" | "info";
+type Tab = "matchups" | "props" | "info";
+const TAB_LABELS: Record<Tab, string> = { matchups: "Matchups", props: "Edge list", info: "Info" };
 
 export default function App() {
   const [props, setProps] = useState<Prop[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [trackRecord, setTrackRecord] = useState<TrackRecord | null>(null);
+  const [matchups, setMatchups] = useState<Matchups | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [selected, setSelected] = useState<Prop | null>(null);
-  const [tab, setTab] = useState<Tab>("props");
+  const [tab, setTab] = useState<Tab>("matchups");
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -35,6 +38,11 @@ export default function App() {
     fetchTrackRecord()
       .then(setTrackRecord)
       .catch(() => setTrackRecord(null));
+    // Without the grid data, fall back to the edge list rather than an
+    // empty primary tab.
+    fetchMatchups()
+      .then(setMatchups)
+      .catch(() => setTab((t) => (t === "matchups" ? "props" : t)));
   }, []);
 
   const filtered = useMemo(() => {
@@ -73,7 +81,7 @@ export default function App() {
           <Banner meta={meta} />
 
           <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-            {(["props", "info"] as const).map((t) => (
+            {(["matchups", "props", "info"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -83,10 +91,17 @@ export default function App() {
                     : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
-                {t === "props" ? "Shots on Goal" : "Info"}
+                {TAB_LABELS[t]}
               </button>
             ))}
           </div>
+
+          {tab === "matchups" && matchups && (
+            <>
+              <MatchupGrid matchups={matchups} props={props} onSelectProp={setSelected} />
+              <TrackRecordSection trackRecord={trackRecord} />
+            </>
+          )}
 
           {tab === "props" && (
             <>

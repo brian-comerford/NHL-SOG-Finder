@@ -9,6 +9,9 @@ data/*
 # ...except pick history, which CI commits back: it's the only record of
 # what the model recommended before each game, and can't be rebuilt later.
 !data/history/
+# ...and the box-score cache behind the position rankings, so each run only
+# fetches new games instead of re-downloading the whole season.
+!data/cache/
 
 # Node / frontend
 frontend/node_modules/

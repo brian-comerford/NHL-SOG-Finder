@@ -54,7 +54,10 @@ export default function PropDetail({ prop, onClose }: { prop: Prop; onClose: () 
           />
           <Stat label="Avg. ice time" value={prop.avg_toi !== null ? `${prop.avg_toi.toFixed(1)} min` : "—"} />
           <Stat label="Shots / 60" value={prop.shots_per_60 !== null ? prop.shots_per_60.toFixed(1) : "—"} />
-          <Stat label="Opponent factor" value={`${prop.opponent_factor.toFixed(2)}x`} />
+          <Stat
+            label={`${prop.opponent} vs ${prop.position}`}
+            value={`${prop.opponent_factor.toFixed(2)}x${prop.opponent_pos_rank !== null ? ` (rank ${prop.opponent_pos_rank})` : ""}`}
+          />
         </div>
 
         {prop.confidence_reasons.length > 0 && (

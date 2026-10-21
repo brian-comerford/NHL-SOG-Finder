@@ -39,6 +39,9 @@ export interface Prop {
   avg_toi: number | null;
   shots_per_60: number | null;
   opponent_factor: number;
+  // Opponent's 1-32 rank in shots allowed to this player's position (32 =
+  // most allowed); null if position data wasn't available.
+  opponent_pos_rank: number | null;
   dispersion: number;
   sample_games: number;
   season_games: number;
@@ -100,4 +103,28 @@ export interface GradedPick {
 export interface TrackRecordDetail {
   updated_at: string;
   picks: GradedPick[];
+}
+
+export type GridPosition = "LW" | "C" | "RW" | "D";
+
+export interface PositionDefense {
+  // Shots allowed per game to this position this season (raw), the
+  // early-season-shrunk value the rank is based on, and its ratio to
+  // league average (the model's opponent adjustment).
+  per_game: number;
+  adjusted: number;
+  factor: number;
+  rank: number;
+}
+
+export type TeamDefense = { games: number } & Record<GridPosition, PositionDefense>;
+
+export interface Matchups {
+  slate_date: string | null;
+  season: number | null;
+  team_count: number;
+  positions: GridPosition[];
+  league_avg: Partial<Record<GridPosition, number>>;
+  games: { game_id: number; start_time_utc: string | null; away_team: string; home_team: string }[];
+  teams: Record<string, TeamDefense>;
 }
